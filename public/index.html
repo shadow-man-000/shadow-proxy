@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proxy</title>
+<style>
+  :root { --bg:#0f1117; --bar:#1a1d27; --text:#eceef5; --muted:#9aa0b4; --accent:#8484ff; --border:#2c3040; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#f6f7fb; --bar:#ffffff; --text:#1c1e26; --muted:#6b7080; --accent:#5b5bf0; --border:#dfe2ec; }
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; margin:0; }
+  body { display:flex; flex-direction:column; background:var(--bg); color:var(--text);
+         font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif; }
+  #bar { display:flex; gap:6px; padding:8px; background:var(--bar); border-bottom:1px solid var(--border); }
+  #bar button { width:38px; border:0; border-radius:10px; background:transparent; color:var(--text); font-size:17px; cursor:pointer; }
+  #bar button:hover { background:var(--bg); }
+  #addr { flex:1; padding:0 14px; height:38px; border-radius:999px; border:1px solid var(--border);
+          background:var(--bg); color:var(--text); font-size:15px; outline:none; }
+  #addr:focus { border-color:var(--accent); }
+  #stage { flex:1; position:relative; }
+  iframe { position:absolute; inset:0; width:100%; height:100%; border:0; background:#fff; display:none; }
+  #home { position:absolute; inset:0; display:grid; place-items:center; text-align:center; padding:20px; }
+  #home h1 { font-size:34px; margin:0 0 8px; }
+  #home p { color:var(--muted); margin:0 0 20px; }
+  .quick { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+  .quick button { padding:8px 16px; border-radius:999px; border:1px solid var(--border); background:var(--bar);
+                  color:var(--text); cursor:pointer; font-size:14px; }
+  .quick button:hover { border-color:var(--accent); }
+  #status { font-size:12px; color:var(--muted); margin-top:16px; min-height:1em; }
+</style>
+<script src="/uv/uv.bundle.js"></script>
+<script src="/uv/uv.config.js"></script>
+</head>
+<body>
+  <div id="bar">
+    <button id="back" title="戻る">←</button>
+    <button id="fwd" title="進む">→</button>
+    <button id="reload" title="再読み込み">⟳</button>
+    <input id="addr" placeholder="URLまたは検索ワードを入力" autocomplete="off" spellcheck="false">
+  </div>
+  <div id="stage">
+    <div id="home">
+      <div>
+        <h1>🌐 Proxy</h1>
+        <p>上のバーにURLか検索ワードを入力してください</p>
+        <div class="quick">
+          <button data-u="https://duckduckgo.com">DuckDuckGo</button>
+          <button data-u="https://ja.wikipedia.org">Wikipedia</button>
+          <button data-u="https://www.bing.com">Bing</button>
+          <button data-u="https://github.com">GitHub</button>
+        </div>
+        <div id="status">初期化中…</div>
+      </div>
+    </div>
+    <iframe id="frame"></iframe>
+  </div>
+
+<script type="module">
+  import { BareMuxConnection } from "/baremux/index.mjs";
+
+  const $ = (id) => document.getElementById(id);
+  const frame = $("frame"), addr = $("addr"), home = $("home"), status = $("status");
+  const wispUrl = (location.protocol === "https:" ? "wss" : "ws") + "://" + location.host + "/wisp/";
+  const connection = new BareMuxConnection("/baremux/worker.js");
+  let ready = false;
+
+  async function init() {
+    if (!("serviceWorker" in navigator)) {
+      status.textContent = "このブラウザ/接続(HTTPSが必要)ではService Workerが使えません";
+      return;
+    }
+    try {
+      await navigator.serviceWorker.register("/sw.js", { scope: __uv$config.prefix });
+      await navigator.serviceWorker.ready;
+      await connection.setTransport("/epoxy/index.mjs", [{ wisp: wispUrl }]);
+      ready = true;
+      status.textContent = "準備完了";
+    } catch (e) {
+      status.textContent = "初期化に失敗: " + e.message;
+    }
+  }
+
+  function toUrl(input) {
+    const v = input.trim();
+    if (/^https?:\/\//i.test(v)) return v;
+    if (/^[\w-]+(\.[\w-]+)+(:\d+)?(\/.*)?$/.test(v)) return "https://" + v;
+    return "https://duckduckgo.com/?q=" + encodeURIComponent(v);
+  }
+
+  async function go(input) {
+    if (!input.trim()) return;
+    if (!ready) await init();
+    if (!ready) return;
+    const url = toUrl(input);
+    home.style.display = "none";
+    frame.style.display = "block";
+    frame.src = __uv$config.prefix + __uv$config.encodeUrl(url);
+    addr.value = url;
+  }
+
+  function syncAddr() {
+    try {
+      const href = frame.contentWindow.location.href;
+      const path = new URL(href).pathname + new URL(href).search;
+      if (path.startsWith(__uv$config.prefix))
+        addr.value = __uv$config.decodeUrl(path.slice(__uv$config.prefix.length));
+      document.title = (frame.contentDocument.title || "Proxy");
+    } catch {}
+  }
+
+  addr.addEventListener("keydown", (e) => { if (e.key === "Enter") go(addr.value); });
+  frame.addEventListener("load", syncAddr);
+  $("back").onclick = () => frame.contentWindow?.history.back();
+  $("fwd").onclick = () => frame.contentWindow?.history.forward();
+  $("reload").onclick = () => frame.contentWindow?.location.reload();
+  document.querySelectorAll(".quick button").forEach((b) => (b.onclick = () => go(b.dataset.u)));
+
+  init();
+</script>
+</body>
+</html>
