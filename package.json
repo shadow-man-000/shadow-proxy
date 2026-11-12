@@ -1,0 +1,15 @@
+{
+  "name": "proxy-uv",
+  "version": "2.0.0",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": { "start": "node src/index.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@mercuryworkshop/bare-mux": "^2.1.7",
+    "@mercuryworkshop/epoxy-transport": "^2.1.27",
+    "@titaniumnetwork-dev/ultraviolet": "^3.2.10",
+    "express": "^4.21.2",
+    "wisp-server-node": "^1.1.8"
+  }
+}
