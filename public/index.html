@@ -72,8 +72,15 @@
       return;
     }
     try {
-      await navigator.serviceWorker.register("/sw.js", { scope: __uv$config.prefix });
-      await navigator.serviceWorker.ready;
+          const reg = await navigator.serviceWorker.register("/sw.js", { scope: __uv$config.prefix });
+      const sw = reg.installing || reg.waiting;
+      if (sw && !reg.active) {
+        await new Promise((resolve) => {
+          const done = () => { if (sw.state === "activated") resolve(); };
+          sw.addEventListener("statechange", done);
+          done();
+        });
+      }
       await connection.setTransport("/epoxy/index.mjs", [{ wisp: wispUrl }]);
       ready = true;
       status.textContent = "準備完了";
